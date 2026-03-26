@@ -57,6 +57,8 @@ class GRPC(StrEnum):
 
     GET_FULL_SIZE_IMAGE = "c8o8Fe"
 
+    LISTEN = "XqA3Ic"
+
     BARD_SETTINGS = "ESY5D"
 
 

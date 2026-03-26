@@ -1767,6 +1767,82 @@ class GeminiClient(GemMixin):
             )
             return None
 
+    async def listen(
+        self,
+        text: str,
+        lang: str = "en",
+        save_path: str | Path | None = None,
+    ) -> bytes:
+        """
+        Convert text to speech using Gemini's built-in TTS (the "Listen" button in the web app).
+
+        Parameters
+        ----------
+        text: `str`
+            The text to convert to speech.
+        lang: `str`, optional
+            Language/locale code for the speech (e.g. "en", "mk-MK", "en-US").
+            Defaults to "en".
+        save_path: `str | Path | None`, optional
+            If provided, save the audio to this file path. The audio format is
+            determined by the server (typically OGG/Opus).
+
+        Returns
+        -------
+        `bytes`
+            Raw audio bytes. Can be saved to a file or streamed directly.
+
+        Raises
+        ------
+        `APIError`
+            If the TTS request fails or returns an unexpected response.
+
+        Examples
+        --------
+        >>> audio = await client.listen("Hello world", lang="en")
+        >>> with open("speech.ogg", "wb") as f:
+        ...     f.write(audio)
+
+        >>> # Or use with a model response:
+        >>> output = await client.generate_content("Tell me a joke")
+        >>> audio = await client.listen(output.text, save_path="joke.ogg")
+        """
+
+        import base64
+
+        payload = [None, text, lang, None, 2]
+
+        response = await self._batch_execute(
+            [
+                RPCData(
+                    rpcid=GRPC.LISTEN,
+                    payload=json.dumps(payload).decode("utf-8"),
+                )
+            ]
+        )
+
+        response_json = extract_json_from_response(response.text)
+
+        audio_b64 = get_nested_value(
+            json.loads(get_nested_value(response_json, [0, 2], "[]")), [0]
+        )
+
+        if not audio_b64 or not isinstance(audio_b64, str):
+            raise APIError(
+                "Listen failed: no audio data returned from the server."
+            )
+
+        audio_bytes = base64.b64decode(audio_b64)
+
+        if save_path:
+            path = Path(save_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(audio_bytes)
+            if self.verbose:
+                logger.info(f"Audio saved to {path}")
+
+        return audio_bytes
+
     @running(retry=2)
     async def _batch_execute(self, payloads: list[RPCData], **kwargs) -> Response:
         """
